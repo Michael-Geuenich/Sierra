@@ -950,21 +950,22 @@ relative_location <- function(location, n) {
 #' @import Gviz
 #' @export
 PlotCoverage<-function(genome_gr, 
-                       geneSymbol="", 
-                       wig_data=NULL, 
-                       bamfiles=NULL,
-                       peaks.annot = NULL,
-                       label.transcripts = FALSE,
-                       wig_same_strand=TRUE, 
-                       genome=NULL, 
-                       pdf_output = FALSE, 
-                       wig_data.tracknames=NULL, 
-                       bamfile.tracknames=NULL,
-                       output_file_name='', 
-                       zoom_3UTR=FALSE,
-                       annotation.fontsize=NULL,
-                       axis.fontsize=NULL
-                       )
+                        geneSymbol="", 
+                        wig_data=NULL, 
+                        bamfiles=NULL,
+                        peaks.annot = NULL,
+                        label.transcripts = FALSE,
+                        wig_same_strand=TRUE, 
+                        genome=NULL, 
+                        pdf_output = FALSE, 
+                        wig_data.tracknames=NULL, 
+                        bamfile.tracknames=NULL,
+                        output_file_name='', 
+                        zoom_3UTR=FALSE,
+                        annotation.fontsize=NULL,
+                        axis.fontsize=NULL,
+                        same.y.scale = TRUE
+)
 {
   # Check that gene_name field exists
   GenomeInfoDb::seqlevelsStyle(genome_gr) <- "UCSC"
@@ -982,20 +983,20 @@ PlotCoverage<-function(genome_gr,
   chrom <- as.character(GenomicRanges::seqnames(genome_gr))[1]
   gene_strand <- as.character(BiocGenerics::strand(genome_gr))[1]
   toExtract_gr <- GenomicRanges::GRanges(seqnames=chrom, ranges=IRanges::IRanges(start-1 , width=end-start+3), strand=gene_strand)
-
+  
   # Assemble gene annotation track
   gene_gr <- IRanges::subsetByOverlaps(genome_gr, toExtract_gr)
   GenomeInfoDb::seqlevelsStyle(gene_gr) <- "UCSC"
   GenomeInfoDb::seqlevels(gene_gr) <- chrom
-
+  
   # Following lines is a hack to get gene symbol to be name of transcripts.
   gene_name_idx <- which(names(GenomicRanges::elementMetadata(gene_gr)) == "gene_name")
   gene_id_idx <- which(names(GenomicRanges::elementMetadata(gene_gr)) == "gene_id")
   names(GenomicRanges::elementMetadata(gene_gr))[gene_id_idx] <- "ensemble_id"
   names(GenomicRanges::elementMetadata(gene_gr))[gene_name_idx] <- "gene_id"
-
+  
   gene_txdb <- GenomicFeatures::makeTxDbFromGRanges(gene_gr)
-
+  
   if (label.transcripts) {
     transcript.fontsize = annotation.fontsize
   } else {transcript.fontsize = 0}
@@ -1008,7 +1009,7 @@ PlotCoverage<-function(genome_gr,
                                   transcriptAnnotation = "symbol",
                                   showId = FALSE,
                                   fontsize.group = transcript.fontsize)
-
+  
   ### Add peaks annotations if provided
   if (!is.null(peaks.annot)) {
     start.sites <- as.numeric(sub(".*:.*:(.*)-.*:.*", "\\1", peaks.annot))
@@ -1033,25 +1034,25 @@ PlotCoverage<-function(genome_gr,
   
   ##### Assemble data track(s)
   dtrack <- list()  # Add data tracks assembled on this list
-
+  
   ## Assemble wig data tracks
   wig_tracks <- list()
   if (! is.null(wig_data))
   {
     if (typeof(wig_data) != "S4")  # assume a dataframe or list which we can create several df.
     { nc <- ncol(wig_data)  # 4 columns are chrom, start, end, strand. Thereafter are sample data
-      wig_data <-  GenomicRanges::makeGRangesFromDataFrame(wig_data,keep.extra.columns=TRUE)
+    wig_data <-  GenomicRanges::makeGRangesFromDataFrame(wig_data,keep.extra.columns=TRUE)
     }
     GenomeInfoDb::seqlevelsStyle(wig_data) <- "UCSC"
-
+    
     if (! wig_same_strand)
     {  toExtract_gr <- GenomicRanges::invertStrand(toExtract_gr)  }
     dtrack_gr <- IRanges::subsetByOverlaps(wig_data, toExtract_gr)
-
-
+    
+    
     GenomeInfoDb::seqlevels(dtrack_gr) <- chrom
     sample_col_idx <- 1: ncol(S4Vectors::mcols(wig_data))
-
+    
     # Now assemble coverage plots
     for(i in sample_col_idx)
     {
@@ -1060,10 +1061,10 @@ PlotCoverage<-function(genome_gr,
       dtrack_name <- names(S4Vectors::mcols(tmp_gr))
       wig_tracks[[length(wig_tracks)+1]] <- Gviz::DataTrack(tmp_gr, name=dtrack_name, type = "histogram", genome=genome)
     }
-
+    
   }
-
-
+  
+  
   ## Load BAM files onto dtrack
   if (length(bamfiles) > 0)
   { 
@@ -1084,10 +1085,10 @@ PlotCoverage<-function(genome_gr,
       bamfile.tracknames <- bamfiles
       names(bamfile.tracknames) <- bamfiles
     }
-
+    
     # Extend gene window 50nt in both directions    
     toExtract_gr <- GenomicRanges::GRanges(seqnames=chrom, ranges=IRanges::IRanges(start-50 , width=end-start+50), strand=gene_strand)
-
+    
     
     for(i in bamfiles)
     {
@@ -1096,10 +1097,10 @@ PlotCoverage<-function(genome_gr,
       {   GenomeInfoDb::seqlevelsStyle(toExtract_gr) <- "NCBI" }
       else
       {   GenomeInfoDb::seqlevelsStyle(toExtract_gr) <- "UCSC" }
-
+      
       param <- Rsamtools::ScanBamParam(which = toExtract_gr)
       bf <-Rsamtools::BamFile(i)
-
+      
       open(bf)
       chunk0 <- GenomicAlignments::readGAlignments(bf,param=param)
       GenomeInfoDb::seqlevelsStyle(chunk0) <- "UCSC"
@@ -1108,22 +1109,22 @@ PlotCoverage<-function(genome_gr,
       if (length(idx) == 0)
       {        next; }
       tmp <-GenomicRanges::coverage(chunk0[idx])
-
+      
       gr <- GenomicRanges::GRanges(seqnames=chrom, ranges=IRanges::IRanges(start:end, width=1), strand=gene_strand)
       S4Vectors::mcols(gr) <- as.numeric(tmp[[chrom]])[start:end]
       dtrack[[length(dtrack)+1]] <- Gviz::DataTrack(gr, name=bamfile.tracknames[i], type = "histogram", genome=genome)
       
     }
   }
-
-
+  
+  
   if (length(wig_tracks) > 0)
   {
     dtrack <- c(wig_tracks, dtrack)
   }
-
+  
   toPlot <- c(gtrack, dtrack)
-
+  
   if (pdf_output)
   {
     if (output_file_name == '')
@@ -1135,16 +1136,34 @@ PlotCoverage<-function(genome_gr,
     }
   }
   extra.space = round( (end - start) * 0.02 )
-  Gviz::plotTracks(toPlot, 
-                   from = start,
-                   to = end,
-                   extend.left = extra.space,
-                   extend.right = extra.space,
-                   chromosome= chrom, 
-                   transcriptAnnotation = "transcript",
-                   showId = TRUE,
-                   fontsize = axis.fontsize)
-
+  
+  #Gev y values for highest peak
+  if(same.y.scale != NULL){
+    ylimit <- unlist(lapply(dtrack, values()))
+    ylimit_max <- max(ylimit)
+    
+    Gviz::plotTracks(toPlot, 
+                     from = start,
+                     to = end,
+                     extend.left = extra.space,
+                     extend.right = extra.space,
+                     chromosome= chrom, 
+                     transcriptAnnotation = "transcript",
+                     showId = TRUE,
+                     fontsize = axis.fontsize,
+                     ylim = c(0, ylimit_max))
+  }else{
+    Gviz::plotTracks(toPlot, 
+                     from = start,
+                     to = end,
+                     extend.left = extra.space,
+                     extend.right = extra.space,
+                     chromosome= chrom, 
+                     transcriptAnnotation = "transcript",
+                     showId = TRUE,
+                     fontsize = axis.fontsize)
+  }
+  
   if (zoom_3UTR)
   {
     idx <- which(genome_gr$type == 'three_prime_utr')
@@ -1162,12 +1181,12 @@ PlotCoverage<-function(genome_gr,
                      showId = FALSE,
                      fontsize = axis.fontsize)
   }
-
-
-
+  
+  
+  
   if (pdf_output)
   {  dev.off() }
-
-}
+  
+  }
 
 
